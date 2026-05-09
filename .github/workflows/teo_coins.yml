@@ -1,8 +1,6 @@
 name: Teo-Coins
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 17,1,7 * * *'
     
 jobs:
   run_teo_coins:
