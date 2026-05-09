@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 17,1,7 * * *'
-
+    
 jobs:
   run_teo_coins:
     runs-on: ubuntu-latest
@@ -24,6 +24,13 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: 🗂️ 缓存 Hash 破解模块
+        id: cache-captcha-solver
+        uses: actions/cache@v4
+        with:
+          path: captcha_solver
+          key: captcha-solver-chromium-latest-v1
+
       - name: 🛡️ 启动 GOST 代理转发
         if: ${{ env.GOST_PROXY != '' }}
         env:
@@ -37,27 +44,11 @@ jobs:
           chmod +x gost
           nohup ./gost -L http://:8080 -F "$GOST_PROXY" > gost.log 2>&1 &
           sleep 3
+          echo "✅ GOST 已启动，测试连通性..."
           curl -s -x http://127.0.0.1:8080 https://api.ipify.org \
             | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1**/g'
 
-      - name: 🐍 安装 requests
-        run: pip install requests
-
-      - name: 🚀 运行脚本（纯 requests）
-        id: run_requests
-        env:
-          TEO_ACCOUNT: ${{ secrets.TEO_ACCOUNT }}
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
-          TG_BOT: ${{ secrets.TG_BOT }}
-        run: |
-          python teo_coins.py
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-        continue-on-error: true
-
-      # ===== 以下步骤仅在 Cookie 失效（exit code=2）时触发 =====
-
-      - name: 🛠️ 安装系统依赖（仅降级时）
-        if: steps.run_requests.outcome == 'failure'
+      - name: 🛠️ 安装系统依赖
         run: |
           sudo apt-get update -q
           sudo apt-get install -y \
@@ -66,16 +57,13 @@ jobs:
             x11-utils \
             xdotool
 
-      - name: 🗂️ 缓存 Hash 破解模块
-        if: steps.run_requests.outcome == 'failure'
-        id: cache-captcha-solver
-        uses: actions/cache@v4
-        with:
-          path: captcha_solver
-          key: captcha-solver-chromium-latest-v1
+      - name: 🐍 安装 Python 依赖
+        run: |
+          pip install seleniumbase
+          seleniumbase install chromedriver
 
-      - name: 🧩 初始化 Hash 破解模块（仅降级时）
-        if: steps.run_requests.outcome == 'failure' && steps.cache-captcha-solver.outputs.cache-hit != 'true'
+      - name: 🧩 初始化 Hash 破解模块
+        if: steps.cache-captcha-solver.outputs.cache-hit != 'true'
         env:
           SOLVER_URL: ${{ secrets.SOLVER_URL }}
         run: |
@@ -86,50 +74,11 @@ jobs:
           cp -r "$(dirname $MANIFEST)/." captcha_solver/
           rm -rf solver_raw solver.zip
 
-      - name: 🐍 安装 seleniumbase（仅降级时）
-        if: steps.run_requests.outcome == 'failure'
-        run: |
-          pip install seleniumbase
-          seleniumbase install chromedriver
-
-      - name: 🔑 降级浏览器登录
-        if: steps.run_requests.outcome == 'failure'
-        id: run_browser
+      - name: 🚀 运行脚本
         env:
+          PYTHONIOENCODING: utf-8
           TEO_ACCOUNT: ${{ secrets.TEO_ACCOUNT }}
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
           TG_BOT: ${{ secrets.TG_BOT }}
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            python teo_coins.py --browser-login
-
-      - name: 🔄 sed 回写新 Cookie 到脚本
-        if: steps.run_requests.outcome == 'failure' && steps.run_browser.outcome == 'success'
-        run: |
-          if [ -f ".new_cookie" ]; then
-            NEW_COOKIE=$(cat .new_cookie)
-            COOKIE_NAME=$(echo "$NEW_COOKIE" | cut -d'=' -f1)
-            COOKIE_VALUE=$(echo "$NEW_COOKIE" | cut -d'=' -f2-)
-            sed -i "s|REMEMBER_WEB_COOKIE = \"${COOKIE_NAME}=[^\"]*\"|REMEMBER_WEB_COOKIE = \"${NEW_COOKIE}\"|" teo_coins.py
-            echo "✅ Cookie 已回写到脚本"
-          else
-            echo "⚠️ 未找到 .new_cookie 文件，跳过回写"
-          fi
-
-      - name: 📤 推回私库（如有 Cookie 更新）
-        if: steps.run_requests.outcome == 'failure' && steps.run_browser.outcome == 'success'
-        env:
-          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
-        run: |
-          cp teo_coins.py private/teo_coins.py
-          cd private
-          if ! git diff --quiet; then
-            git config user.email "actions@github.com"
-            git config user.name "GitHub Actions"
-            git add teo_coins.py
-            git commit -m "🔄 自动更新 remember_web Cookie"
-            git push "https://${PRIVATE_REPO_TOKEN}@github.com/${{ github.repository_owner }}/Teo-Coins-Private.git" HEAD
-            echo "✅ 已推回私库"
-          else
-            echo "ℹ️ Cookie 无变化，无需推送"
-          fi
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python teo_coins.py
