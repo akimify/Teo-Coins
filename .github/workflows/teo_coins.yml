@@ -40,7 +40,6 @@ jobs:
       - name: 🚀 运行脚本
         env:
           TEO_COOKIE: ${{ secrets.TEO_COOKIE }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT: ${{ secrets.TG_BOT }}
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
         run: node teo_coins.js
