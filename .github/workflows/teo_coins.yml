@@ -15,19 +15,7 @@ jobs:
           path: private
 
       - name: 📂 移动脚本到工作目录
-        run: mv private/teo_coins.py teo_coins.py
-
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: 🗂️ 缓存 Hash 破解模块
-        id: cache-captcha-solver
-        uses: actions/cache@v4
-        with:
-          path: captcha_solver
-          key: captcha-solver-chromium-latest-v1
+        run: mv private/teo_coins.js teo_coins.js
 
       - name: 🛡️ 启动 GOST 代理转发
         if: ${{ env.GOST_PROXY != '' }}
@@ -46,37 +34,9 @@ jobs:
           curl -s -x http://127.0.0.1:8080 https://api.ipify.org \
             | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1**/g'
 
-      - name: 🛠️ 安装系统依赖
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y \
-            google-chrome-stable \
-            xvfb \
-            x11-utils \
-            xdotool
-
-      - name: 🐍 安装 Python 依赖
-        run: |
-          pip install seleniumbase
-          seleniumbase install chromedriver
-
-      - name: 🧩 初始化 Hash 破解模块
-        if: steps.cache-captcha-solver.outputs.cache-hit != 'true'
-        env:
-          SOLVER_URL: ${{ secrets.SOLVER_URL }}
-        run: |
-          wget -q "$SOLVER_URL" -O solver.zip
-          unzip solver.zip -d solver_raw
-          MANIFEST=$(find solver_raw -name "manifest.json" | head -1)
-          mkdir -p captcha_solver
-          cp -r "$(dirname $MANIFEST)/." captcha_solver/
-          rm -rf solver_raw solver.zip
-
       - name: 🚀 运行脚本
         env:
-          PYTHONIOENCODING: utf-8
-          TEO_ACCOUNT: ${{ secrets.TEO_ACCOUNT }}
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
-          TG_BOT: ${{ secrets.TG_BOT }}
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python teo_coins.py
+          TEO_COOKIE: ${{ secrets.TEO_COOKIE }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: node teo_coins.js
